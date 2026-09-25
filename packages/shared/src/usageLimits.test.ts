@@ -830,21 +830,25 @@ describe("account names", () => {
   };
 
   it("censors every email, keeping only first letters and the top-level domain", () => {
-    expect(censorEmail("theo@ping.gg")).toBe("t•••@p•••.gg");
+    expect(censorEmail("name@email.gg")).toBe("n•••@e•••.gg");
     expect(censorEmail("Someone@mail.example.co.uk")).toBe("S•••@m•••.uk");
-    expect(limitAccountName({ ...base, email: "theo@gmail.com" })).toBe("t•••@g•••.com");
+    expect(limitAccountName({ ...base, email: "name@email.com" })).toBe("n•••@e•••.com");
     expect(
       limitAccountName({
         ...base,
-        email: "Theo@Gmail.com",
+        email: "Name@Email.com",
         sourceLabel: "hub",
-        sourceAccountId: "claude-theo@gmail.com.json",
+        sourceAccountId: "claude-name@email.com.json",
       }),
-    ).toBe("claude-T•••@G•••.com.json");
+    ).toBe("claude-N•••@E•••.com.json");
     // A hub that reports no separate email still never prints the address.
     expect(
-      limitAccountName({ ...base, sourceLabel: "hub", sourceAccountId: "claude-theo@t3.gg.json" }),
-    ).toBe("c•••@t•••.json");
+      limitAccountName({
+        ...base,
+        sourceLabel: "hub",
+        sourceAccountId: "claude-name@email.dev.json",
+      }),
+    ).toBe("c•••@e•••.json");
     expect(limitAccountName({ ...base, displayName: "Work" })).toBe("Work");
     expect(limitAccountName(base)).toBeNull();
   });

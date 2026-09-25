@@ -447,7 +447,7 @@ export function limitsNotice(limits: ServerProviderUsageLimits): string | null {
 const CENSOR = "•••";
 const EMAIL_PATTERN = /[^\s@]+@[^\s@]+/g;
 
-/** `theo@ping.gg` → `t•••@p•••.gg`: enough to tell accounts apart, too little to identify one. */
+/** `name@email.com` → `n•••@e•••.com`: enough to tell accounts apart, too little to identify one. */
 export function censorEmail(email: string): string {
   const at = email.lastIndexOf("@");
   if (at < 0) return `${email.slice(0, 1)}${CENSOR}`;
@@ -459,7 +459,7 @@ export function censorEmail(email: string): string {
 
 /**
  * How a limits view names an account without printing its email. A hub
- * account keeps its auth file name (`claude-t•••@g•••.com.json`), a native
+ * account keeps its auth file name (`claude-n•••@e•••.com.json`), a native
  * one shows its email; either way the address is censored. Falls back to the
  * instance name, then null when there is nothing to show.
  */
