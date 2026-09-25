@@ -39,8 +39,8 @@ const WEEK_MINS = 7 * 24 * 60;
 const WINDOWS: Readonly<
   Record<string, Pick<ServerProviderUsageWindow, "kind" | "label" | "windowDurationMins">>
 > = {
-  five_hour: { kind: "session", label: "Session", windowDurationMins: SESSION_MINS },
-  seven_day: { kind: "weekly", label: "Weekly", windowDurationMins: WEEK_MINS },
+  five_hour: { kind: "session", label: "5-hour limit", windowDurationMins: SESSION_MINS },
+  seven_day: { kind: "weekly", label: "7-day limit", windowDurationMins: WEEK_MINS },
 };
 
 /**
@@ -72,7 +72,7 @@ function scopedWindow(
   return {
     id: scopedWindowId(displayName),
     kind: "weekly",
-    label: `Weekly · ${displayName}`,
+    label: `7-day ${displayName}`,
     windowDurationMins: WEEK_MINS,
     usedPercent: clampPercent(usedPercent),
     ...(resetsAt ? { resetsAt } : {}),
