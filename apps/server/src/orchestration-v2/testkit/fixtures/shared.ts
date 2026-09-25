@@ -189,6 +189,13 @@ export type OrchestratorFixtureInputStep =
       readonly waitForTurnItemType?: OrchestrationV2TurnItem["type"];
     }
   | {
+      /** Wait until that run has projected an item of this type in this status. */
+      readonly type: "await_turn_item";
+      readonly targetRunIndex: number;
+      readonly itemType: OrchestrationV2TurnItem["type"];
+      readonly status: OrchestrationV2TurnItem["status"];
+    }
+  | {
       readonly type: "capture_shell_snapshot";
       readonly key: string;
     }
@@ -509,7 +516,9 @@ export function materializeFixtureInput(input: {
                     nextStep.targetRunIndex === runIndex) ||
                   // A provider continuation run starts while this thread is
                   // busy, so waiting for idle first would never return.
-                  (nextStep.type === "await_run_status" && nextStep.targetRunIndex > runIndex))) ||
+                  (nextStep.type === "await_run_status" && nextStep.targetRunIndex > runIndex) ||
+                  // Held open for background work, so it cannot go idle yet.
+                  (nextStep.type === "await_turn_item" && nextStep.targetRunIndex === runIndex))) ||
               nextStep?.type === "approve_next_runtime_request" ||
               nextStep?.type === "answer_next_user_input_request";
             const key = `run:${runIndex}`;
@@ -604,6 +613,15 @@ export function materializeFixtureInput(input: {
               itemType: step.waitForTurnItemType,
             });
           }
+          break;
+        case "await_turn_item":
+          steps.push({
+            type: "await_run_turn_item",
+            threadId: ids.threadId,
+            runId: runIdFor(step.targetRunIndex),
+            itemType: step.itemType,
+            itemStatus: step.status,
+          });
           break;
         case "capture_shell_snapshot":
           steps.push({ type: "capture_shell_snapshot", key: step.key });
