@@ -1,6 +1,7 @@
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
 import {
   collectLimitNotices,
+  cursorUsageWindowDetails,
   formatDuration,
   formatResetsIn,
   type LimitAccount,
@@ -20,6 +21,12 @@ import { getDriverOption } from "../settings/providerDriverMeta";
 import { Alert, AlertTitle } from "../ui/alert";
 import { ResetCredits, WindowBar, barColor } from "./UsageLimits";
 import { collectLimitSections, type LimitSection } from "./usageLimitSections";
+
+/** Cursor names its pools itself; every other window keeps the provider's label. */
+function columnDetails(driver: LimitPool["driver"], window: { id: string; label: string }) {
+  const cursor = driver === "cursor" ? cursorUsageWindowDetails(window.id) : undefined;
+  return { label: cursor?.label ?? window.label, description: cursor?.description };
+}
 
 /**
  * Every row on the page shares one template, so the columns line up down
@@ -48,10 +55,12 @@ function CellHeading({ label, value }: { readonly label: string; readonly value:
 /** One window of one account: what is left, the bar, and when it resets. */
 function WindowCell({
   window,
+  label,
   color,
   now,
 }: {
   readonly window: ServerProviderUsageWindow;
+  readonly label: string;
   readonly color: string;
   readonly now: number;
 }) {
@@ -59,7 +68,7 @@ function WindowCell({
   const resetsIn = formatResetsIn(window, now);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <CellHeading label={window.label} value={`${remainingPercent(window)}%`} />
+      <CellHeading label={label} value={`${remainingPercent(window)}%`} />
       <WindowBar color={color} window={window} now={now} />
       <span className="truncate text-xs text-muted-foreground tabular-nums">
         {window.resetsAt && resetsIn ? (
@@ -80,11 +89,19 @@ function WindowCell({
  * are 500%. The next reset that hands anything back is counted in the same
  * points.
  */
-function TotalCell({ column, now }: { readonly column: LimitPoolWindow; readonly now: number }) {
+function TotalCell({
+  column,
+  label,
+  now,
+}: {
+  readonly column: LimitPoolWindow;
+  readonly label: string;
+  readonly now: number;
+}) {
   const next = column.resets.find((reset) => reset.member.window.usedPercent > 0);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
-      <span className="truncate text-xs text-muted-foreground">{column.label}</span>
+      <span className="truncate text-xs text-muted-foreground">{label}</span>
       <span className="flex items-baseline gap-1.5">
         <span className="text-2xl font-semibold text-foreground tabular-nums">
           {column.totalRemainingPercent}%
@@ -149,6 +166,7 @@ function AccountRows({
   readonly now: number;
 }) {
   const color = barColor(pool.driver);
+  const details = columns.map((column) => columnDetails(pool.driver, column));
   return (
     <div className="flex flex-col">
       {pool.accounts.length > 1 && columns.length > 0 ? (
@@ -159,8 +177,13 @@ function AccountRows({
               {pool.accounts.length} accounts pooled
             </span>
           </div>
-          {columns.map((column) => (
-            <TotalCell key={`${column.kind}:${column.id}`} column={column} now={now} />
+          {columns.map((column, position) => (
+            <TotalCell
+              key={`${column.kind}:${column.id}`}
+              column={column}
+              label={details[position]!.label}
+              now={now}
+            />
           ))}
         </Row>
       ) : null}
@@ -170,24 +193,38 @@ function AccountRows({
           {account.limits.windows.length === 0 ? (
             <p className="text-xs text-muted-foreground md:col-[2/-1]">No usage reported yet.</p>
           ) : (
-            columns.map((column) => {
+            columns.map((column, position) => {
               const window = column.columns[index]?.window;
+              const label = details[position]!.label;
               return window ? (
                 <WindowCell
                   key={`${column.kind}:${column.id}`}
                   window={window}
+                  label={label}
                   color={color}
                   now={now}
                 />
               ) : (
                 <span key={`${column.kind}:${column.id}`} className="text-xs text-muted-foreground">
-                  {column.label}: not reported
+                  {label}: not reported
                 </span>
               );
             })
           )}
         </Row>
       ))}
+      {details.some((detail) => detail.description) ? (
+        <dl className="flex flex-col gap-0.5 border-t border-border/60 pt-3 text-xs">
+          {details.map((detail) =>
+            detail.description ? (
+              <div key={detail.label} className="flex flex-wrap gap-x-1.5">
+                <dt className="font-medium text-foreground">{detail.label}</dt>
+                <dd className="text-muted-foreground">{detail.description}</dd>
+              </div>
+            ) : null,
+          )}
+        </dl>
+      ) : null}
     </div>
   );
 }
@@ -196,10 +233,13 @@ function ProviderSection({
   section,
   gridColumns,
   now,
+  children,
 }: {
   readonly section: LimitSection;
   readonly gridColumns: number;
   readonly now: number;
+  /** Provider-specific setup shown under the section, such as enabling Cursor usage. */
+  readonly children?: ReactNode;
 }) {
   const label = getDriverOption(section.driver)?.label ?? String(section.driver);
   return (
@@ -232,6 +272,7 @@ function ProviderSection({
           {section.empty.detail ? ` · ${section.empty.detail}` : null}
         </p>
       )}
+      {children}
     </section>
   );
 }
@@ -243,9 +284,12 @@ function ProviderSection({
 export function UsageLimitsByProvider({
   presentations,
   now,
+  cursorPrompt,
 }: {
   readonly presentations: LimitPresentations;
   readonly now: number;
+  /** Offered in the Cursor section when an environment can read Cursor usage once allowed. */
+  readonly cursorPrompt?: ReactNode;
 }) {
   const sections = collectLimitSections(presentations, now);
   const notices = collectLimitNotices(presentations, { includeUnmetered: true });
@@ -257,12 +301,9 @@ export function UsageLimitsByProvider({
   return (
     <div className="flex flex-col gap-8">
       {sections.map((section) => (
-        <ProviderSection
-          key={section.driver}
-          section={section}
-          gridColumns={gridColumns}
-          now={now}
-        />
+        <ProviderSection key={section.driver} section={section} gridColumns={gridColumns} now={now}>
+          {section.driver === "cursor" ? cursorPrompt : null}
+        </ProviderSection>
       ))}
       <LimitNotices notices={notices} />
     </div>

@@ -76,6 +76,29 @@ describe("collectLimitSections", () => {
     ]);
   });
 
+  it("shows Cursor's two pools instead of their combined total", () => {
+    const cursor = provider({
+      instanceId: ProviderInstanceId.make("cursor"),
+      driver: ProviderDriverKind.make("cursor"),
+      usageLimits: {
+        checkedAt,
+        windows: ["totalPercentUsed", "apiPercentUsed", "autoPercentUsed"].map((id) => ({
+          id,
+          kind: "monthly" as const,
+          label: id,
+          usedPercent: 10,
+        })),
+      },
+    });
+    const section = collectLimitSections(presentations([cursor]), now).find(
+      (candidate) => candidate.driver === "cursor",
+    );
+    expect(section?.pool ? section.columns.map((column) => column.id) : null).toEqual([
+      "autoPercentUsed",
+      "apiPercentUsed",
+    ]);
+  });
+
   it("keeps a provider outside the fixed order when it reports accounts", () => {
     const other = provider({
       driver: ProviderDriverKind.make("future"),

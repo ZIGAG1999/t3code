@@ -2,6 +2,7 @@ import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
 import {
   collectLimitAccounts,
   collectLimitPools,
+  displayLimitWindows,
   type LimitPool,
   type LimitPoolWindow,
   type LimitPresentations,
@@ -71,11 +72,16 @@ export function collectLimitSections(
   });
 }
 
-/** Claude's model allowance (`seven_day_<model>`) leads its account-wide windows. */
+/**
+ * The windows worth a column, per `displayLimitWindows` (Cursor shows its two
+ * pools instead of their combined total). Claude's model allowance
+ * (`seven_day_<model>`) leads its account-wide windows.
+ */
 function limitColumns(pool: LimitPool): readonly LimitPoolWindow[] {
-  if (pool.driver !== "claudeAgent") return pool.windows;
+  const windows = displayLimitWindows(pool);
+  if (pool.driver !== "claudeAgent") return windows;
   const scoped = (window: LimitPoolWindow) => window.id.startsWith("seven_day_");
-  return [...pool.windows.filter(scoped), ...pool.windows.filter((window) => !scoped(window))];
+  return [...windows.filter(scoped), ...windows.filter((window) => !scoped(window))];
 }
 
 /**
