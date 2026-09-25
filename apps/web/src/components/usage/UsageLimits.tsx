@@ -35,7 +35,7 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { UsageLimitsPooled } from "./UsageLimitsPooled";
+import { UsageLimitsByProvider } from "./UsageLimitsByProvider";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {
@@ -47,12 +47,18 @@ const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof Ga
 /** The series colour the cost chart uses for this driver, so the two views read as one. */
 export function barColor(driver: ServerProvider["driver"]): string {
   const kind: UsageProviderKind | undefined =
-    driver === "codex" ? "codex" : driver === "claudeAgent" ? "claude" : undefined;
+    driver === "codex"
+      ? "codex"
+      : driver === "claudeAgent"
+        ? "claude"
+        : driver === "grok"
+          ? "grok"
+          : undefined;
   return kind ? PROVIDER_PRESENTATION[kind].color : "var(--foreground)";
 }
 
 /** Pace as a glyph with the words on hover. */
-export function PaceIcon({ pace }: { readonly pace: LimitPace }) {
+function PaceIcon({ pace }: { readonly pace: LimitPace }) {
   const Icon = PACE[pace].icon;
   return (
     <Tooltip>
@@ -78,7 +84,7 @@ export function PaceIcon({ pace }: { readonly pace: LimitPace }) {
  * window the clock is, which is also where even spending would have put the
  * fill. Hover for the exact figures and reset time.
  */
-function WindowBar({
+export function WindowBar({
   color,
   window,
   now,
@@ -202,10 +208,7 @@ const OUTCOME_TEXT: Record<ProviderConsumeResetCreditOutcome, string> = {
 };
 
 /** Everything a redeem needs: where to send it and what to say afterwards. */
-export function useResetCredit(
-  environmentId: EnvironmentId,
-  input: ProviderConsumeResetCreditInput,
-) {
+function useResetCredit(environmentId: EnvironmentId, input: ProviderConsumeResetCreditInput) {
   const consume = useAtomCommand(serverEnvironment.consumeResetCredit, { reportFailure: false });
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -237,7 +240,7 @@ export function useResetCredit(
  * holds the button: dialogs stack under popovers, and closing the popover
  * would unmount a dialog rendered inside it.
  */
-export function ResetCreditDialog({
+function ResetCreditDialog({
   open,
   onOpenChange,
   onConfirm,
@@ -266,7 +269,7 @@ export function ResetCreditDialog({
 }
 
 /** `2 reset credits banked · next expires in 27d 23h`, or the short form for a popover. */
-export function resetCreditsSummary(
+function resetCreditsSummary(
   credits: ServerProviderResetCredits,
   now: number,
   compact = false,
@@ -316,8 +319,8 @@ export function ResetCredits({
 
 /**
  * Subscription quota across every connected environment's providers and hubs,
- * pooled per provider. The page advances `now` on explicit refresh rather than
- * ticking: a live clock would repaint the page for no decision-changing gain.
+ * one section per provider. The page advances `now` on explicit refresh rather
+ * than ticking: a live clock would repaint the page for no decision-changing gain.
  */
 export function UsageLimitsSection({
   selectedEnvironmentIds,
@@ -331,5 +334,5 @@ export function UsageLimitsSection({
     selectedEnvironmentIds === null
       ? presentations
       : new Map([...presentations].filter(([id]) => selectedEnvironmentIds.has(id)));
-  return <UsageLimitsPooled presentations={selected} now={now} />;
+  return <UsageLimitsByProvider presentations={selected} now={now} />;
 }

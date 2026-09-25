@@ -49,19 +49,20 @@ the dialog.
 
 ## Track subscription limits
 
-**Usage → Limits** pools every subscription account it can see per provider, so with several Codex
-or Claude accounts across your environments and hubs you read one number per window rather than a
-list. Each window card shows how much of the pool is left and a bar with one segment per account,
-kept in the same column across windows. Accounts are ordered by their 5-hour reset, soonest
-first, or by the first available window when no account reports a 5-hour limit. A gap means the
-account does not report that window. When the provider reports reset times, the card also says
-when the next reset lands and how much it hands back. The hatched
-part of a segment is what that reset restores. Tap a segment or account row for the account's plan,
-where it is signed in, and its reset time. On web, you can hover too. Codex and Claude accounts
-with banked reset credits show a ticket count and the **Use reset** action in the account details.
-Claude resets are not available when the server runs on macOS, where Claude keeps its login in the
-Keychain. On narrow screens, numbered rows below
-the bar show each account's quota, countdown, and credits. Tap a row to open its details.
+On web and desktop, **Usage → Limits** has a section for each provider: Claude, Codex, Grok,
+OpenCode, Cursor, and Antigravity. Each account gets a row with its email partly hidden, its plan,
+and a bar per window showing what is left and when it resets. Claude accounts show their 7-day
+model allowance, 5-hour limit, and 7-day limit. With several accounts, **All accounts** at the top
+adds up what is left, so five untouched accounts read 500%, and shows how much the next reset
+hands back. Accounts are ordered by their 5-hour reset, soonest first. Codex and Claude accounts
+with banked reset credits show **Use reset** in their row. Claude resets are not available when
+the server runs on macOS, where Claude keeps its login in the Keychain. A provider with no account
+reporting limits shows **Disabled** and why, for example that it is turned off or does not report
+limits. Antigravity does not report limits.
+
+On mobile, **Limits** pools each provider's accounts into one number per window, with a bar
+segment per account. Tap a segment or account row for the account's plan, where it is signed in,
+its reset time, and **Use reset**.
 
 The same account signed in on more than one environment, or reported by a hub as well, counts once.
 Filter with the environment dropdown to see what a single machine has.

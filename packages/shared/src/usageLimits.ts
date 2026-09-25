@@ -78,6 +78,8 @@ export interface LimitAccount {
   }>;
   /** The hub that reported it, when no environment has it natively. */
   readonly sourceLabel: string | null;
+  /** The hub's own id for the account (its auth file name), alongside `sourceLabel`. */
+  readonly sourceAccountId: string | null;
   /** Where the displayed reset credit can be redeemed. */
   readonly redeem: {
     readonly environmentId: EnvironmentId;
@@ -86,12 +88,32 @@ export interface LimitAccount {
   readonly limits: ServerProviderUsageLimits;
 }
 
+export interface LimitCollectOptions {
+  /**
+   * Also keep accounts whose read succeeded but has no windows yet, such as a
+   * Grok account nothing has been metered on, instead of leaving them to a
+   * notice. For views that give every account its own row.
+   */
+  readonly includeUnmetered?: boolean;
+}
+
+function isUnmetered(limits: ServerProviderUsageLimits): boolean {
+  return limits.unavailable === undefined && limits.windows.length === 0;
+}
+
+function skipLimits(limits: ServerProviderUsageLimits, options: LimitCollectOptions): boolean {
+  return limitsNotice(limits) !== null && !(options.includeUnmetered && isUnmetered(limits));
+}
+
 /**
  * Every account with usable windows across the connected environments, one
  * entry per distinct account. The freshest reads supply windows and credits;
  * native instances supply names and environment labels.
  */
-export function collectLimitAccounts(presentations: LimitPresentations): readonly LimitAccount[] {
+export function collectLimitAccounts(
+  presentations: LimitPresentations,
+  options: LimitCollectOptions = {},
+): readonly LimitAccount[] {
   const accounts = new Map<string, LimitAccount>();
   const creditSources = new Map<string, LimitAccount>();
   const hubRedeems = new Map<string, LimitAccount>();
@@ -122,7 +144,13 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       accounts.set(key, next);
       return;
     }
-    const fresher = Date.parse(next.limits.checkedAt) > Date.parse(previous.limits.checkedAt);
+    const nextMetered = next.limits.windows.length > 0;
+    const previousMetered = previous.limits.windows.length > 0;
+    // A read with windows outranks a fresher one that has none yet.
+    const nextWins =
+      nextMetered === previousMetered
+        ? Date.parse(next.limits.checkedAt) > Date.parse(previous.limits.checkedAt)
+        : nextMetered;
     // Two instances on one machine sharing an account still name it once.
     const environments = [
       ...previous.environments,
@@ -131,7 +159,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
           !previous.environments.some((seen) => seen.environmentId === candidate.environmentId),
       ),
     ];
-    const winner = fresher ? next : previous;
+    const winner = nextWins ? next : previous;
     // Credits and their redemption target travel together. A failed credit
     // probe must not erase a successful read from another environment.
     const creditSource = creditSources.get(key);
@@ -143,6 +171,8 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
       environments,
       // A hub only names the account when no environment has it natively.
       sourceLabel: environments.length > 0 ? null : (previous.sourceLabel ?? next.sourceLabel),
+      sourceAccountId:
+        environments.length > 0 ? null : (previous.sourceAccountId ?? next.sourceAccountId),
       redeem:
         hubRedeems.get(key)?.redeem ??
         (creditSource ? creditSource.redeem : (winner.redeem ?? previous.redeem ?? next.redeem)),
@@ -157,7 +187,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
   for (const [environmentId, presentation] of presentations) {
     const label = presentation.entry.target.label;
     for (const provider of providersWithLimits(presentation.serverConfig?.providers ?? [])) {
-      if (!provider.usageLimits || limitsNotice(provider.usageLimits) !== null) continue;
+      if (!provider.usageLimits || skipLimits(provider.usageLimits, options)) continue;
       merge(
         accountKey(provider.driver, provider.auth.email) ??
           `${environmentId}:${provider.instanceId}`,
@@ -170,6 +200,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
           accentColor: provider.accentColor,
           environments: [{ environmentId, label }],
           sourceLabel: null,
+          sourceAccountId: null,
           redeem: { environmentId, input: { instanceId: provider.instanceId } },
           limits: provider.usageLimits,
         },
@@ -186,7 +217,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
         ? `${presentation.entry.target.label} · ${source.label}`
         : source.label;
       for (const account of source.accounts) {
-        if (limitsNotice(account.usageLimits) !== null) continue;
+        if (skipLimits(account.usageLimits, options)) continue;
         merge(accountKey(account.driver, account.email) ?? `${source.id}:${account.id}`, {
           key: `${source.id}:${account.id}`,
           driver: account.driver,
@@ -196,6 +227,7 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
           accentColor: undefined,
           environments: [],
           sourceLabel,
+          sourceAccountId: account.id,
           redeem: account.usageLimits.resetCredits?.nextCreditId
             ? {
                 environmentId,
@@ -220,7 +252,10 @@ export function collectLimitAccounts(presentations: LimitPresentations): readonl
  * are left out; there is nothing for the user to act on. The environment
  * is named only when more than one is connected.
  */
-export function collectLimitNotices(presentations: LimitPresentations): readonly string[] {
+export function collectLimitNotices(
+  presentations: LimitPresentations,
+  options: LimitCollectOptions = {},
+): readonly string[] {
   const label = (environmentLabel: string, subject: string) =>
     presentations.size > 1 ? `${environmentLabel} · ${subject}` : subject;
   const notices: string[] = [];
@@ -230,7 +265,11 @@ export function collectLimitNotices(presentations: LimitPresentations): readonly
       // An account that can never report (API key) is left out; one that
       // failed, or reported nothing at all, is worth a line.
       if (provider.usageLimits?.unavailable?.reason === "unsupported") continue;
-      const notice = provider.usageLimits ? limitsNotice(provider.usageLimits) : null;
+      // With `includeUnmetered` the account has a row saying so instead.
+      const notice =
+        provider.usageLimits && skipLimits(provider.usageLimits, options)
+          ? limitsNotice(provider.usageLimits)
+          : null;
       const name = provider.displayName?.trim() || String(provider.driver);
       if (notice) notices.push(`${label(environmentLabel, name)}: ${notice}`);
     }
@@ -266,6 +305,8 @@ export interface LimitPoolWindow {
     readonly window: ServerProviderUsageWindow | null;
   }>;
   readonly remainingPercent: number;
+  /** Remaining percent summed over the members: five untouched accounts are 500. */
+  readonly totalRemainingPercent: number;
   readonly usedPercent: number;
   readonly pace: LimitPace | null;
   readonly resets: ReadonlyArray<{
@@ -384,6 +425,7 @@ function poolWindows(accounts: readonly LimitAccount[], now: number): readonly L
       ),
       usedPercent: Math.round(usedPercent),
       remainingPercent: Math.round(100 - usedPercent),
+      totalRemainingPercent: members.reduce((sum, m) => sum + remainingPercent(m.window), 0),
       pace: meanElapsed === null ? null : paceOfShares(timedUsed, meanElapsed),
       resets,
     };
@@ -400,6 +442,37 @@ export function limitsNotice(limits: ServerProviderUsageLimits): string | null {
     return limits.unavailable.message ?? "Could not read limits.";
   }
   return limits.windows.length === 0 ? "No limits reported." : null;
+}
+
+const CENSOR = "•••";
+const EMAIL_PATTERN = /[^\s@]+@[^\s@]+/g;
+
+/** `theo@ping.gg` → `t•••@p•••.gg`: enough to tell accounts apart, too little to identify one. */
+export function censorEmail(email: string): string {
+  const at = email.lastIndexOf("@");
+  if (at < 0) return `${email.slice(0, 1)}${CENSOR}`;
+  const domain = email.slice(at + 1);
+  const dot = domain.lastIndexOf(".");
+  const tld = dot > 0 ? domain.slice(dot) : "";
+  return `${email.slice(0, 1)}${CENSOR}@${domain.slice(0, 1)}${CENSOR}${tld}`;
+}
+
+/**
+ * How a limits view names an account without printing its email. A hub
+ * account keeps its auth file name (`claude-t•••@g•••.com.json`), a native
+ * one shows its email; either way the address is censored. Falls back to the
+ * instance name, then null when there is nothing to show.
+ */
+export function limitAccountName(account: LimitAccount): string | null {
+  const { email, sourceAccountId } = account;
+  if (sourceAccountId) {
+    const at = email ? sourceAccountId.toLowerCase().indexOf(email.toLowerCase()) : -1;
+    if (email && at >= 0) {
+      return `${sourceAccountId.slice(0, at)}${censorEmail(email)}${sourceAccountId.slice(at + email.length)}`;
+    }
+    return sourceAccountId.replace(EMAIL_PATTERN, censorEmail);
+  }
+  return email ? censorEmail(email) : account.displayName;
 }
 
 /** Quota left in the window, 0..100. Bars and labels show what remains, as Codex does. */

@@ -16,7 +16,9 @@ import {
   collectLimitAccounts,
   collectLimitNotices,
   collectLimitPools,
+  censorEmail,
   elapsedShare,
+  limitAccountName,
   formatResetsIn,
   limitsNotice,
   paceOf,
@@ -567,6 +569,7 @@ describe("pools", () => {
           accentColor: undefined,
           environments: [],
           sourceLabel: null,
+          sourceAccountId: null,
           redeem: null,
           limits: {
             checkedAt,
@@ -613,6 +616,7 @@ describe("pooled account columns", () => {
     accentColor: undefined,
     environments: [],
     sourceLabel: "Hub",
+    sourceAccountId: null,
     redeem: null,
     limits: { checkedAt: "2026-09-03T11:00:00.000Z", windows },
   });
@@ -739,6 +743,110 @@ describe("collectLimitNotices", () => {
       serverConfig: { providers: [], usageLimitSources: [] },
     });
     expect(collectLimitNotices(one)[0]).toBe("Laptop · Claude Max: Could not read limits.");
+  });
+});
+
+describe("unmetered accounts", () => {
+  const grok = ProviderDriverKind.make("grok");
+  const unmetered = provider({
+    instanceId: ProviderInstanceId.make("grok"),
+    driver: grok,
+    auth: { status: "authenticated", email: "someone@example.com" },
+    usageLimits: { checkedAt: "2026-09-03T11:30:00.000Z", windows: [] },
+  });
+  const presentations = (providers: ServerProvider[]) =>
+    new Map([
+      [
+        EnvironmentId.make("env-a"),
+        { entry: { target: { label: "Laptop" } }, serverConfig: { providers } },
+      ],
+    ]);
+
+  it("gives a read with no windows yet a row instead of a notice when asked", () => {
+    const input = presentations([unmetered]);
+    expect(collectLimitAccounts(input)).toEqual([]);
+    expect(collectLimitNotices(input)).toEqual(["grok: No limits reported."]);
+
+    const accounts = collectLimitAccounts(input, { includeUnmetered: true });
+    expect(accounts.map((account) => [account.driver, account.limits.windows])).toEqual([
+      [grok, []],
+    ]);
+    expect(collectLimitNotices(input, { includeUnmetered: true })).toEqual([]);
+    const [pool] = collectLimitPools(accounts, now);
+    expect(pool).toMatchObject({ driver: grok, windows: [] });
+    expect(pool?.accounts).toHaveLength(1);
+  });
+
+  it("keeps an older read's windows over a fresher read that has none", () => {
+    const metered = {
+      ...unmetered,
+      instanceId: ProviderInstanceId.make("grok-2"),
+      usageLimits: { checkedAt: "2026-09-03T11:00:00.000Z", windows: [window] },
+    };
+    const [account] = collectLimitAccounts(presentations([unmetered, metered]), {
+      includeUnmetered: true,
+    });
+    expect(account?.limits.windows).toEqual([window]);
+  });
+});
+
+describe("pooled totals", () => {
+  it("sums what is left across the accounts that report a window", () => {
+    const account = (key: string, usedPercent: number): LimitAccount => ({
+      key,
+      driver: ProviderDriverKind.make("claudeAgent"),
+      displayName: key,
+      email: undefined,
+      plan: undefined,
+      accentColor: undefined,
+      environments: [],
+      sourceLabel: "Hub",
+      sourceAccountId: key,
+      redeem: null,
+      limits: { checkedAt: "2026-09-03T11:00:00.000Z", windows: [{ ...window, usedPercent }] },
+    });
+    const [pool] = collectLimitPools(
+      [account("a", 0), account("b", 0), account("c", 8), account("d", 0), account("e", 0)],
+      now,
+    );
+    expect(pool?.windows[0]?.totalRemainingPercent).toBe(492);
+    expect(pool?.windows[0]?.members).toHaveLength(5);
+  });
+});
+
+describe("account names", () => {
+  const base: LimitAccount = {
+    key: "k",
+    driver: ProviderDriverKind.make("claudeAgent"),
+    displayName: null,
+    email: undefined,
+    plan: undefined,
+    accentColor: undefined,
+    environments: [],
+    sourceLabel: null,
+    sourceAccountId: null,
+    redeem: null,
+    limits: { checkedAt: "2026-09-03T11:00:00.000Z", windows: [] },
+  };
+
+  it("censors every email, keeping only first letters and the top-level domain", () => {
+    expect(censorEmail("theo@ping.gg")).toBe("t•••@p•••.gg");
+    expect(censorEmail("Someone@mail.example.co.uk")).toBe("S•••@m•••.uk");
+    expect(limitAccountName({ ...base, email: "theo@gmail.com" })).toBe("t•••@g•••.com");
+    expect(
+      limitAccountName({
+        ...base,
+        email: "Theo@Gmail.com",
+        sourceLabel: "hub",
+        sourceAccountId: "claude-theo@gmail.com.json",
+      }),
+    ).toBe("claude-T•••@G•••.com.json");
+    // A hub that reports no separate email still never prints the address.
+    expect(
+      limitAccountName({ ...base, sourceLabel: "hub", sourceAccountId: "claude-theo@t3.gg.json" }),
+    ).toBe("c•••@t•••.json");
+    expect(limitAccountName({ ...base, displayName: "Work" })).toBe("Work");
+    expect(limitAccountName(base)).toBeNull();
   });
 });
 
