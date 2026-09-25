@@ -86,6 +86,53 @@ it.effect("reads Go limits with the instance's XDG credentials and preserves res
   }),
 );
 
+it.effect(
+  "reads the Go key from the Zen `opencode` entry when there is no `opencode-go` entry",
+  () =>
+    Effect.gen(function* () {
+      const resetsAt = "2026-09-17T12:00:00.000Z";
+      for (const [auth, expectedKey] of [
+        ['{"opencode":{"type":"api","key":"zen-key"}}', "zen-key"],
+        [
+          '{"opencode":{"type":"api","key":"zen-key"},"opencode-go":{"type":"api","key":"go-key"}}',
+          "go-key",
+        ],
+        ["{}", "env-key"],
+      ] as const) {
+        const limits = yield* readOpenCodeGoUsageLimits({
+          enabled: true,
+          serverUrl: "",
+          environment: {
+            OPENCODE_AUTH_CONTENT: auth,
+            OPENCODE_API_KEY: "env-key",
+          },
+        }).pipe(
+          Effect.provideService(
+            HttpClient.HttpClient,
+            HttpClient.make((request) => {
+              NodeAssert.equal(request.headers.authorization, `Bearer ${expectedKey}`);
+              return Effect.succeed(
+                HttpClientResponse.fromWeb(
+                  request,
+                  Response.json({
+                    usage: {
+                      rolling: { percent: 5, resetsAt },
+                      weekly: { percent: 5, resetsAt },
+                      monthly: { percent: 5, resetsAt },
+                    },
+                  }),
+                ),
+              );
+            }),
+          ),
+          Effect.provide(NodeServices.layer),
+        );
+        NodeAssert.equal(limits.unavailable, undefined);
+        NodeAssert.equal(limits.windows.length, 3);
+      }
+    }),
+);
+
 it.effect("does not read local credentials for external or disabled OpenCode instances", () =>
   Effect.gen(function* () {
     for (const settings of [

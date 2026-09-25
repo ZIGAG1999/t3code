@@ -15,7 +15,10 @@ import {
   makeUsageLimits,
 } from "../providerUsageLimits.ts";
 
-const AuthFile = Schema.Struct({ "opencode-go": Schema.optionalKey(Schema.Unknown) });
+const AuthFile = Schema.Struct({
+  "opencode-go": Schema.optionalKey(Schema.Unknown),
+  opencode: Schema.optionalKey(Schema.Unknown),
+});
 const ApiAuth = Schema.Struct({ type: Schema.Literal("api"), key: Schema.String });
 const decodeAuthFile = Schema.decodeEffect(Schema.fromJsonString(AuthFile));
 const decodeApiAuth = Schema.decodeUnknownOption(ApiAuth);
@@ -54,8 +57,12 @@ export const readOpenCodeGoUsageLimits = Effect.fn("readOpenCodeGoUsageLimits")(
         }),
       ));
     const auth = yield* decodeAuthFile(contents);
-    const apiAuth = decodeApiAuth(auth["opencode-go"]);
-    // OpenCode overlays stored API credentials after environment credentials.
+    // The key may be stored under `opencode-go` or under the Zen provider's
+    // `opencode`; a key without a Go subscription gets the 403 below. OpenCode
+    // overlays stored API credentials after environment credentials.
+    const apiAuth = Option.orElse(decodeApiAuth(auth["opencode-go"]), () =>
+      decodeApiAuth(auth.opencode),
+    );
     const apiKey = (Option.isSome(apiAuth) ? apiAuth.value.key : env.OPENCODE_API_KEY)?.trim();
     if (!apiKey) return unsupported;
 
