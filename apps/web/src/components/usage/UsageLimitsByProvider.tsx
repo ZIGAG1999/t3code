@@ -1,5 +1,6 @@
 import type { ServerProviderUsageWindow } from "@t3tools/contracts";
 import {
+  CHATGPT_USAGE_URL,
   collectLimitNotices,
   cursorUsageWindowDetails,
   formatDuration,
@@ -11,16 +12,23 @@ import {
   limitAccountName,
   remainingPercent,
 } from "@t3tools/shared/usageLimits";
-import { AlertTriangleIcon } from "lucide-react";
+import { AlertTriangleIcon, ExternalLinkIcon } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { usePrimarySettings } from "../../hooks/useSettings";
+import { ensureLocalApi } from "../../localApi";
 import { formatUpcomingTimestamp } from "../../timestampFormat";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import { OpenAI } from "../Icons";
 import { getDriverOption } from "../settings/providerDriverMeta";
 import { Alert, AlertTitle } from "../ui/alert";
+import { Button } from "../ui/button";
 import { ResetCredits, WindowBar, barColor } from "./UsageLimits";
-import { collectLimitSections, type LimitSection } from "./usageLimitSections";
+import {
+  collectLimitSections,
+  type ExternalUsageLink,
+  type LimitSection,
+} from "./usageLimitSections";
 
 /** Cursor names its pools itself; every other window keeps the provider's label. */
 function columnDetails(driver: LimitPool["driver"], window: { id: string; label: string }) {
@@ -229,6 +237,40 @@ function AccountRows({
   );
 }
 
+/**
+ * A provider-owned usage page for accounts whose quota the client cannot read,
+ * such as ChatGPT accounts connected to Codex with managed authentication.
+ */
+function ExternalUsageCard({ link }: { readonly link: ExternalUsageLink }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border p-4">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        {link.url === CHATGPT_USAGE_URL ? (
+          <OpenAI className="size-5 shrink-0" aria-hidden="true" />
+        ) : null}
+        <div className="min-w-0 space-y-1">
+          <h3 className="text-sm font-medium">{link.label}</h3>
+          {link.url === CHATGPT_USAGE_URL ? (
+            <p className="text-xs text-muted-foreground">
+              View usage in ChatGPT with your connected account.
+            </p>
+          ) : link.message ? (
+            <p className="max-w-xl text-xs text-muted-foreground">{link.message}</p>
+          ) : null}
+        </div>
+      </div>
+      <Button
+        variant="ghost-muted"
+        size="xs"
+        onClick={() => void ensureLocalApi().shell.openExternal(link.url)}
+      >
+        Manage usage
+        <ExternalLinkIcon className="size-3.5" aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
 function ProviderSection({
   section,
   gridColumns,
@@ -266,12 +308,15 @@ function ProviderSection({
           gridColumns={gridColumns}
           now={now}
         />
-      ) : (
+      ) : section.externalLinks.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           {section.empty.headline}
           {section.empty.detail ? ` · ${section.empty.detail}` : null}
         </p>
-      )}
+      ) : null}
+      {section.externalLinks.map((link) => (
+        <ExternalUsageCard key={link.url} link={link} />
+      ))}
       {children}
     </section>
   );

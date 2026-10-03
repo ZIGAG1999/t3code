@@ -1,5 +1,6 @@
 import { ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
 import {
+  collectExternalUsageLinks,
   collectLimitAccounts,
   collectLimitPools,
   displayLimitWindows,
@@ -16,19 +17,24 @@ const SECTION_ORDER = ["claudeAgent", "codex", "grok", "opencode", "cursor", "an
   (driver) => ProviderDriverKind.make(driver),
 );
 
-export type LimitSection =
+/** Provider-owned usage pages for accounts whose quota the client cannot read. */
+export type ExternalUsageLink = ReturnType<typeof collectExternalUsageLinks>[number];
+
+export type LimitSection = {
+  readonly driver: ServerProvider["driver"];
+  readonly externalLinks: readonly ExternalUsageLink[];
+} & (
   | {
-      readonly driver: ServerProvider["driver"];
       readonly pool: LimitPool;
       /** The pool's windows in column order. */
       readonly columns: readonly LimitPoolWindow[];
     }
   | {
-      readonly driver: ServerProvider["driver"];
       readonly pool: null;
       /** Why there are no accounts to show. */
       readonly empty: LimitsEmptyState;
-    };
+    }
+);
 
 /** `Disabled` and why, or the status summary's checking state while configs load. */
 export interface LimitsEmptyState {
@@ -59,10 +65,12 @@ export function collectLimitSections(
   const drivers = [...new Set([...SECTION_ORDER, ...pools.map((pool) => pool.driver)])];
   return drivers.map((driver): LimitSection => {
     const pool = pools.find((candidate) => candidate.driver === driver);
+    const externalLinks = collectExternalUsageLinks(onlyDriver(presentations, driver));
     return pool
-      ? { driver, pool, columns: limitColumns(pool) }
+      ? { driver, externalLinks, pool, columns: limitColumns(pool) }
       : {
           driver,
+          externalLinks,
           pool: null,
           empty: limitsEmptyState(
             providers.filter((provider) => provider.driver === driver),
@@ -70,6 +78,27 @@ export function collectLimitSections(
           ),
         };
   });
+}
+
+/** The same presentations with only one driver's provider instances. */
+function onlyDriver(
+  presentations: LimitPresentations,
+  driver: ServerProvider["driver"],
+): LimitPresentations {
+  return new Map(
+    [...presentations].map(([environmentId, presentation]) => [
+      environmentId,
+      {
+        ...presentation,
+        serverConfig: presentation.serverConfig && {
+          ...presentation.serverConfig,
+          providers: (presentation.serverConfig.providers ?? []).filter(
+            (provider) => provider.driver === driver,
+          ),
+        },
+      },
+    ]),
+  );
 }
 
 /**
