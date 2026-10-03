@@ -99,6 +99,27 @@ describe("collectLimitSections", () => {
     ]);
   });
 
+  it("puts a provider-owned usage page in that provider's section only", () => {
+    const managed = provider({
+      auth: { status: "authenticated", email: "someone@example.com" },
+      usageLimits: {
+        checkedAt,
+        windows: [],
+        unavailable: { reason: "unsupported", message: "Open ChatGPT usage." },
+        externalUsage: { label: "ChatGPT usage", url: "https://chatgpt.com/#settings/Usage" },
+      },
+    });
+    const sections = collectLimitSections(presentations([managed]), now);
+    const codex = sections.find((section) => section.driver === "codex");
+    expect(codex?.pool).toBeNull();
+    expect(codex?.externalLinks.map((link) => link.url)).toEqual([
+      "https://chatgpt.com/#settings/Usage",
+    ]);
+    expect(
+      sections.filter((section) => section.driver !== "codex").flatMap((s) => s.externalLinks),
+    ).toEqual([]);
+  });
+
   it("keeps a provider outside the fixed order when it reports accounts", () => {
     const other = provider({
       driver: ProviderDriverKind.make("future"),
