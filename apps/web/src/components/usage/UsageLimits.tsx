@@ -40,7 +40,7 @@ import {
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
-import { UsageLimitsPooled } from "./UsageLimitsPooled";
+import { UsageLimitsByProvider } from "./UsageLimitsByProvider";
 import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 const PACE: Record<LimitPace, { readonly label: string; readonly icon: typeof GaugeIcon }> = {
@@ -56,7 +56,8 @@ export function barColor(driver: ServerProvider["driver"]): string {
   return presentation?.color ?? "var(--foreground)";
 }
 
-export function PaceIcon({ pace }: { readonly pace: LimitPace }) {
+/** Pace as a glyph with the words on hover. */
+function PaceIcon({ pace }: { readonly pace: LimitPace }) {
   const Icon = PACE[pace].icon;
   return (
     <Tooltip>
@@ -101,7 +102,7 @@ function paceMarkStyles(timeLeft: number | null) {
  * Pace mark styles for the bar given the returned ref. Below 6px there is no room for the gap
  * and tick, so the bar draws neither, as the mobile bars do.
  */
-export function usePaceMark(timeLeft: number | null) {
+function usePaceMark(timeLeft: number | null) {
   const [bar, setBar] = useState<HTMLElement | null>(null);
   const [roomy, setRoomy] = useState(false);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- measures the bar DOM width before paint and remeasures through a ResizeObserver
@@ -114,7 +115,7 @@ export function usePaceMark(timeLeft: number | null) {
   return [setBar, roomy ? paceMarkStyles(timeLeft) : null] as const;
 }
 
-function WindowBar({
+export function WindowBar({
   color,
   window,
   now,
@@ -238,7 +239,8 @@ const OUTCOME_TEXT: Record<ProviderConsumeResetCreditOutcome, string> = {
   alreadyRedeemed: "That credit was already redeemed.",
 };
 
-export function useResetCredit(environmentId: EnvironmentId) {
+/** Everything a redeem needs: where to send it and what to say afterwards. */
+function useResetCredit(environmentId: EnvironmentId) {
   const canManageProviders = useEnvironmentScope(environmentId, AuthProvidersManageScope);
   const consume = useAtomCommand(serverEnvironment.consumeResetCredit, { reportFailure: false });
   // Kept after close so the dialog's text survives its exit animation.
@@ -274,9 +276,13 @@ export function useResetCredit(environmentId: EnvironmentId) {
   return { canManageProviders, choice, confirming, setConfirming, confirm, busy, status, redeem };
 }
 
-/** Require confirmation because redemption spends credits. Mount outside popovers, which stack above
- * dialogs and unmount on close. */
-export function ResetCreditDialog({
+/**
+ * The confirm for a redeem. Redeeming spends a credit the provider granted the
+ * user, so it never fires on a bare click. Mount it outside any popover that
+ * holds the button: dialogs stack under popovers, and closing the popover
+ * would unmount a dialog rendered inside it.
+ */
+function ResetCreditDialog({
   open,
   onOpenChange,
   choice,
@@ -350,7 +356,11 @@ export function ResetCredits({
   );
 }
 
-/** Advance now only on explicit refresh to avoid page repaints from ticking. */
+/**
+ * Subscription quota across every connected environment's providers and hubs,
+ * one section per provider. The page advances `now` on explicit refresh rather
+ * than ticking: a live clock would repaint the page for no decision-changing gain.
+ */
 export function UsageLimitsSection({
   selectedEnvironmentIds,
   hiddenProviders,
@@ -390,5 +400,5 @@ export function UsageLimitsSection({
       ];
     }),
   );
-  return <UsageLimitsPooled presentations={selected} now={now} />;
+  return <UsageLimitsByProvider presentations={selected} now={now} />;
 }
