@@ -39,7 +39,7 @@ describe("claudeUsageResponseToLimits", () => {
           {
             id: "five_hour",
             kind: "session",
-            label: "Session",
+            label: "5-hour limit",
             usedPercent: 54,
             windowDurationMins: 300,
             resetsAt: "2026-07-18T14:39:00.000Z",
@@ -47,7 +47,7 @@ describe("claudeUsageResponseToLimits", () => {
           {
             id: "seven_day",
             kind: "weekly",
-            label: "Weekly",
+            label: "7-day limit",
             usedPercent: 18.4,
             windowDurationMins: 10080,
             resetsAt: "2026-07-24T08:59:00.000Z",
@@ -55,7 +55,7 @@ describe("claudeUsageResponseToLimits", () => {
           {
             id: "seven_day_fable",
             kind: "weekly",
-            label: "Weekly · Fable",
+            label: "7-day Fable",
             usedPercent: 73,
             windowDurationMins: 10080,
             resetsAt: "2026-07-24T08:59:00.000Z",
@@ -100,7 +100,7 @@ describe("claudeUsageResponseToLimits", () => {
       {
         id: "seven_day",
         kind: "weekly",
-        label: "Weekly",
+        label: "7-day limit",
         usedPercent: 100,
         windowDurationMins: 10080,
       },
@@ -158,7 +158,7 @@ describe("claudeUsageResponseToLimits", () => {
       {
         id: "five_hour",
         kind: "session",
-        label: "Session",
+        label: "5-hour limit",
         usedPercent: 12,
         windowDurationMins: 300,
       },
@@ -240,7 +240,7 @@ describe("claudeRateLimitEventToUpdate", () => {
         {
           id: "seven_day",
           kind: "weekly",
-          label: "Weekly",
+          label: "7-day limit",
           usedPercent: 85,
           windowDurationMins: 10080,
           resetsAt: "2026-07-14T03:33:20.000Z",
@@ -261,7 +261,7 @@ describe("claudeRateLimitEventToUpdate", () => {
         {
           id: "seven_day_fable",
           kind: "weekly",
-          label: "Weekly · Fable",
+          label: "7-day Fable",
           usedPercent: 40,
           windowDurationMins: 10080,
         },

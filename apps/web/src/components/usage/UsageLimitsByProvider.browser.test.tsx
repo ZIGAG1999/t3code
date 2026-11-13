@@ -8,7 +8,7 @@ import { CHATGPT_USAGE_URL } from "@t3tools/shared/usageLimits";
 import { describe, expect, it } from "vite-plus/test";
 
 import { render } from "../../../test/render";
-import { UsageLimitsPooled } from "./UsageLimitsPooled";
+import { UsageLimitsByProvider } from "./UsageLimitsByProvider";
 
 const checkedAt = "2026-10-25T16:00:00.000Z";
 
@@ -35,7 +35,7 @@ function managedChatGpt(instanceId: string, displayName: string): ServerProvider
   };
 }
 
-describe("UsageLimitsPooled ChatGPT usage card", () => {
+describe("UsageLimitsByProvider ChatGPT usage card", () => {
   it("names the managed connections it covers", async () => {
     const presentations = new Map([
       [
@@ -52,7 +52,7 @@ describe("UsageLimitsPooled ChatGPT usage card", () => {
       ],
     ]);
     await using screen = await render(
-      <UsageLimitsPooled presentations={presentations} now={Date.parse(checkedAt)} />,
+      <UsageLimitsByProvider presentations={presentations} now={Date.parse(checkedAt)} />,
     );
 
     await expect
