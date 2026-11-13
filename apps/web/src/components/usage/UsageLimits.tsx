@@ -400,5 +400,5 @@ export function UsageLimitsSection({
       ];
     }),
   );
-  return <UsageLimitsByProvider presentations={selected} now={now} />;
+  return <UsageLimitsByProvider presentations={selected} now={now} hiddenDrivers={hiddenDrivers} />;
 }

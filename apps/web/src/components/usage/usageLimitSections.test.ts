@@ -7,7 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { collectLimitSections, limitsEmptyState } from "./usageLimitSections";
+import { collectLimitSections, limitsEmptyState, nextRefill } from "./usageLimitSections";
 
 const now = Date.parse("2026-09-25T12:00:00.000Z");
 const checkedAt = "2026-09-25T11:00:00.000Z";
@@ -82,6 +82,44 @@ describe("collectLimitSections", () => {
       usageLimits: { checkedAt, windows: [claudeWindow("five_hour", "Session")] },
     });
     expect(collectLimitSections(presentations([other]), now).at(-1)?.driver).toBe("future");
+  });
+
+  it("leaves out providers hidden on the Usage page", () => {
+    const hidden = new Set([ProviderDriverKind.make("codex"), ProviderDriverKind.make("grok")]);
+    expect(
+      collectLimitSections(presentations([]), now, hidden).map((section) => section.driver),
+    ).toEqual(["claudeAgent", "opencode", "cursor", "antigravity"]);
+  });
+});
+
+describe("nextRefill", () => {
+  it("counts only what a weekly-blocked session gets back", () => {
+    // The spent week resets first, and the session still has 60% left to give back.
+    const claude = provider({
+      driver: ProviderDriverKind.make("claudeAgent"),
+      usageLimits: {
+        checkedAt,
+        windows: [
+          {
+            ...claudeWindow("five_hour", "5-hour limit"),
+            usedPercent: 40,
+            resetsAt: "2026-09-25T15:00:00.000Z",
+          },
+          {
+            ...claudeWindow("seven_day", "7-day limit"),
+            usedPercent: 100,
+            resetsAt: "2026-09-25T14:00:00.000Z",
+          },
+        ],
+      },
+    });
+    const [section] = collectLimitSections(presentations([claude]), now);
+    const session = section?.pool
+      ? section.columns.find((column) => column.kind === "session")
+      : undefined;
+    const next = session ? nextRefill(session) : null;
+    expect(next?.member.refillPercent).toBe(60);
+    expect(next?.at).toBe(Date.parse("2026-09-25T14:00:00.000Z"));
   });
 });
 

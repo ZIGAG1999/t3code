@@ -38,11 +38,13 @@ export interface LimitsEmptyState {
 /**
  * One section per provider: its accounts pooled when any reported a read,
  * otherwise the reason it has none. Providers outside the fixed order that
- * still report accounts follow at the end.
+ * still report accounts follow at the end. Providers hidden on the Usage page
+ * get no section.
  */
 export function collectLimitSections(
   presentations: LimitPresentations,
   now: number,
+  hidden: ReadonlySet<ServerProvider["driver"]> = new Set(),
 ): readonly LimitSection[] {
   const pools = collectLimitPools(
     collectLimitAccounts(presentations, { includeUnmetered: true }),
@@ -55,7 +57,9 @@ export function collectLimitSections(
   const loading = [...presentations.values()].some(
     (presentation) => presentation.serverConfig === null,
   );
-  const drivers = [...new Set([...SECTION_ORDER, ...pools.map((pool) => pool.driver)])];
+  const drivers = [...new Set([...SECTION_ORDER, ...pools.map((pool) => pool.driver)])].filter(
+    (driver) => !hidden.has(driver),
+  );
   return drivers.map((driver): LimitSection => {
     const pool = pools.find((candidate) => candidate.driver === driver);
     return pool
@@ -69,6 +73,15 @@ export function collectLimitSections(
           ),
         };
   });
+}
+
+/**
+ * The next reset that hands quota back. An account blocked by a spent weekly
+ * window only gets back what its session has left, so this reads the pool's
+ * refill rather than the session's own usage.
+ */
+export function nextRefill(column: LimitPoolWindow) {
+  return column.resets.find((reset) => reset.member.refillPercent > 0) ?? null;
 }
 
 /** Claude's model allowance (`seven_day_<model>`) leads its account-wide windows. */

@@ -1,4 +1,4 @@
-import type { ServerProviderUsageWindow } from "@t3tools/contracts";
+import type { ServerProvider, ServerProviderUsageWindow } from "@t3tools/contracts";
 import {
   CHATGPT_USAGE_URL,
   collectExternalUsageLinks,
@@ -24,7 +24,7 @@ import { providerClients } from "../settings/providerDriverMeta";
 import { Alert, AlertTitle } from "../ui/alert";
 import { Button } from "../ui/button";
 import { ResetCredits, WindowBar, barColor } from "./UsageLimits";
-import { collectLimitSections, type LimitSection } from "./usageLimitSections";
+import { collectLimitSections, type LimitSection, nextRefill } from "./usageLimitSections";
 
 /**
  * Every row on the page shares one template, so the columns line up down
@@ -86,7 +86,7 @@ function WindowCell({
  * points.
  */
 function TotalCell({ column, now }: { readonly column: LimitPoolWindow; readonly now: number }) {
-  const next = column.resets.find((reset) => reset.member.window.usedPercent > 0);
+  const next = nextRefill(column);
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="truncate text-xs text-muted-foreground">{column.label}</span>
@@ -100,7 +100,7 @@ function TotalCell({ column, now }: { readonly column: LimitPoolWindow; readonly
         {next ? (
           <>
             <span className="font-medium text-foreground">
-              ↻ +{Math.round(next.member.window.usedPercent)}%
+              ↻ +{Math.round(next.member.refillPercent)}%
             </span>{" "}
             {next.at <= now ? "now" : `in ${formatDuration(next.at - now)}`}
           </>
@@ -248,11 +248,13 @@ function ProviderSection({
 export function UsageLimitsByProvider({
   presentations,
   now,
+  hiddenDrivers,
 }: {
   readonly presentations: LimitPresentations;
   readonly now: number;
+  readonly hiddenDrivers?: ReadonlySet<ServerProvider["driver"]>;
 }) {
-  const sections = collectLimitSections(presentations, now);
+  const sections = collectLimitSections(presentations, now, hiddenDrivers);
   const notices = collectLimitNotices(presentations, { includeUnmetered: true });
   const externalLinks = collectExternalUsageLinks(presentations);
   // One column count for the whole page, so bars line up across providers.
